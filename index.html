@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Study Timer</title>
+    <style>
+        body {
+            font-family: 'Cascadia Code', monospace;
+            background-image: url('iit-bombay-sign-angle.png');
+            background-size: cover;
+            background-position: center;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        .container {
+            text-align: center;
+            position: relative;
+            z-index: 1; /* Ensure the timer container is above the background */
+        }
+
+        .timer-container {
+            max-width: 80%; /* Adjust the max-width for the timer space */
+            background-color: rgba(255, 255, 255, 0.5);
+            padding: 20px;
+            border-radius: 10px;
+            backdrop-filter: blur(20px);
+        }
+
+        .button-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding: 10px;
+            border-radius: 10px;
+            backdrop-filter: blur(20px);
+            background-color: rgba(255, 255, 255, 0.5);
+            background-size: cover;
+        }
+
+        .button-space {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        h1 {
+            color: #0f0f0f;
+        }
+
+        #timerLabel {
+            color: #333;
+        }
+
+        #timer {
+            font-size: 3em;
+            margin: 20px 0;
+            color: #333;
+        }
+
+        #notifications {
+            font-size: 1em;
+            margin: 10px 0;
+            color: #FF0000;
+            transition: opacity 0.5s ease;
+        }
+
+        button, input {
+            font-size: 1em;
+            padding: 10px 20px;
+            margin: 0 10px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            transition: transform 0.3s ease;
+        }
+
+        button:hover, input:hover {
+            transform: scale(1.1);
+        }
+
+        input {
+            font-size: 1em;
+            padding: 8px;
+            margin-bottom: 10px;
+        }
+
+        .custom-input {
+            display: inline-block;
+            color: #333;
+        }
+
+        .custom-input-hidden {
+            display: none;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        #fullscreenBtn {
+            background-color: transparent;
+            background-image: url('fullscreen.png');
+            background-size: cover;
+            width: 30px;
+            height: 30px;
+        }
+
+        #playSongBtn {
+            background-color: transparent;
+            background-image: url('play.png');
+            background-size: cover;
+            width: 30px;
+            height: 40px;
+        }
+
+        #stopSongBtn {
+            background-color: transparent;
+            background-image: url('pause.png');
+            background-size: cover;
+            width: 30px;
+            height: 40px;
+        }
+        @media only screen and (max-width: 600px) {
+        body {
+            background-size: contain;
+        }
+
+        .container {
+            width: 90%;
+        }
+
+        .timer-container {
+            max-width: 100%;
+            padding: 10px;
+        }
+
+        .button-container {
+            bottom: 10px;
+            right: 10px;
+        }
+
+        button, input {
+            font-size: 0.8em;
+            padding: 8px 15px;
+        }
+
+        #timer {
+            font-size: 2em;
+        }
+
+        #fullscreenBtn,
+        #playSongBtn,
+        #stopSongBtn {
+            width: 20px;
+            height: 20px;
+        }
+    }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="timer-container">
+            <h1>Study Timer</h1>
+            <label id="timerLabel" for="customTime" class="custom-input">Set Study Timer (minutes): </label>
+            <div class="custom-input">
+                <input type="number" id="customTime" min="1" step="1" value="25">
+            </div>
+            <br>
+            <div id="timer">25:00</div>
+            <div id="notifications"></div>
+            <button id="startBtn" onclick="startStudyTimer()">Start</button>
+            <button id="pauseBtn" onclick="pauseStudyTimer()" class="hidden">Pause</button>
+            <button id="setBreakBtn" onclick="setupBreakTimer()" class="hidden" disabled>Set Break</button>
+        </div>
+    </div>
+
+    <div class="button-container">
+        <div class="button-space">
+            <button id="fullscreenBtn" onclick="toggleFullscreen()"></button>
+            <button id="playSongBtn" onclick="chooseLocalSong()"></button>
+            <button id="stopSongBtn" onclick="stopLocalSong()"></button>
+        </div>
+    </div>
+
+    <script>
+        let studyTimer;
+        let breakTimer;
+        let timeLeft = 1500;
+        let isPaused = false;
+        let audio;
+
+        let audioNotification = new Audio('notification.mp3');
+
+        function playNotificationSound() {
+            audioNotification.play();
+        }
+
+        function showNotification(message, isImportant = false) {
+            const notificationsElement = document.getElementById('notifications');
+            notificationsElement.innerText = message;
+
+            if (isImportant) {
+                playNotificationSound();
+            }
+
+            notificationsElement.style.opacity = 1;
+
+            setTimeout(() => {
+                notificationsElement.style.opacity = 0;
+            }, 5000);
+        }
+
+        function startStudyTimer() {
+            clearInterval(breakTimer);
+
+            const customTimeInput = document.getElementById('customTime');
+            const inputValue = customTimeInput.value;
+            const customTime = parseInt(inputValue, 10) * 60 || 25 * 60;
+
+            if (!studyTimer || isPaused) {
+                timeLeft = (isPaused ? timeLeft : customTime) || 1500;
+                updateTimerDisplay();
+                studyTimer = setInterval(updateStudyTimer, 1000);
+                customTimeInput.classList.add('custom-input-hidden');
+                document.getElementById('timerLabel').classList.add('custom-input-hidden');
+                document.getElementById('setBreakBtn').disabled = true;
+                document.getElementById('pauseBtn').classList.remove('hidden');
+                document.getElementById('startBtn').classList.add('hidden');
+                isPaused = false;
+            }
+        }
+
+        function pauseStudyTimer() {
+            clearInterval(studyTimer);
+            studyTimer = null;
+            document.getElementById('startBtn').classList.remove('hidden');
+            document.getElementById('pauseBtn').classList.add('hidden');
+            document.getElementById('setBreakBtn').disabled = false;
+            isPaused = true;
+        }
+
+        function updateStudyTimer() {
+            if (timeLeft > 0) {
+                timeLeft--;
+                updateTimerDisplay();
+            } else {
+                clearInterval(studyTimer);
+                studyTimer = null;
+                showNotification('Study Time is up! Take a break.');
+                const customTimeInput = document.getElementById('customTime');
+                customTimeInput.classList.remove('custom-input-hidden');
+                document.getElementById('timerLabel').classList.remove('custom-input-hidden');
+                customTimeInput.value = '';
+                document.getElementById('setBreakBtn').disabled = false;
+                document.getElementById('startBtn').classList.remove('hidden');
+                document.getElementById('pauseBtn').classList.add('hidden');
+                document.getElementById('setBreakBtn').classList.remove('hidden');
+            }
+        }
+
+        function setupBreakTimer() {
+            const breakCustomTimeInput = prompt('Set Break Timer (minutes):', '10');
+            const breakCustomTime = parseInt(breakCustomTimeInput, 10) * 60 || 10 * 60;
+
+            showNotification(`Break time set for ${breakCustomTimeInput} minutes. Enjoy your break!`);
+
+            timeLeft = breakCustomTime;
+            updateTimerDisplay();
+            breakTimer = setInterval(updateBreakTimer, 1000);
+            document.getElementById('setBreakBtn').disabled = true;
+            document.getElementById('setBreakBtn').classList.add('hidden');
+            document.getElementById('startBtn').classList.add('hidden');
+            document.getElementById('pauseBtn').classList.add('hidden');
+        }
+
+        function updateBreakTimer() {
+            if (timeLeft > 0) {
+                timeLeft--;
+                updateTimerDisplay();
+            } else {
+                clearInterval(breakTimer);
+                breakTimer = null;
+                showNotification('Break Time is up! Get back to work.');
+                const customTimeInput = document.getElementById('customTime');
+                customTimeInput.classList.remove('custom-input-hidden');
+                document.getElementById('timerLabel').classList.remove('custom-input-hidden');
+                document.getElementById('setBreakBtn').disabled = false;
+                document.getElementById('startBtn').classList.remove('hidden');
+                document.getElementById('pauseBtn').classList.add('hidden');
+                document.getElementById('setBreakBtn').classList.remove('hidden');
+            }
+        }
+
+        function updateTimerDisplay() {
+            const minutes = Math.floor(timeLeft / 60);
+            const seconds = timeLeft % 60;
+            document.getElementById('timer').innerText = `${formatTime(minutes)}:${formatTime(seconds)}`;
+        }
+
+        function formatTime(time) {
+            return time < 10 ? `0${time}` : time;
+        }
+
+        function toggleFullscreen() {
+            const doc = window.document;
+            const docEl = doc.documentElement;
+
+            const requestFullScreen = docEl.requestFullscreen || docEl.mozRequestFullScreen || docEl.webkitRequestFullScreen || docEl.msRequestFullscreen;
+            const cancelFullScreen = doc.exitFullscreen || doc.mozCancelFullScreen || doc.webkitExitFullscreen || doc.msExitFullscreen;
+
+            if (!doc.fullscreenElement && !doc.mozFullScreenElement && !doc.webkitFullscreenElement && !doc.msFullscreenElement) {
+                requestFullScreen.call(docEl);
+            } else {
+                cancelFullScreen.call(doc);
+            }
+        }
+
+        function chooseLocalSong() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'audio/*';
+
+            input.addEventListener('change', function (event) {
+                const selectedFile = event.target.files[0];
+
+                if (selectedFile) {
+                    audio = new Audio();
+                    audio.src = URL.createObjectURL(selectedFile);
+                    audio.play();
+                    showNotification(`Now playing: ${selectedFile.name}`);
+                }
+            });
+
+            input.click();
+        }
+
+        function stopLocalSong() {
+            if (audio && !audio.paused) {
+                audio.pause();
+                audio.currentTime = 0;
+                showNotification('Song stopped.');
+            }
+        }
+    </script>
+</body>
+</html>
